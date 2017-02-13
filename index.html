@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8"/>
+		<meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+		<meta name="viewport" content="width=device-width, initial-scale=1"/>
+		<link rel="stylesheet" href="bootstrap.min.css"/> <!-- https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/ -->
+		
+		<title>gbz80 to items &bull; Online gbz80 to items converter</title>
+		<meta name="description" content="An easy online convertor for Pokemon Red/Blue/Yellow arbitrary code execution !"/>
+		
+		<link rel="stylesheet" href="gbz80toitems.css"/>
+	</head>
+	
+	<body>
+		<nav class="nav navbar-inverse navbar-fixed-top">
+			<div class="container">
+				<div class="navbar-header">
+					<button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar-content" aria-expanded="false">
+						<span class="sr-only">Toggle navigation</span>
+						<span class="icon-bar"></span>
+						<span class="icon-bar"></span>
+						<span class="icon-bar"></span>
+					</button>
+					<a class="navbar-brand">GBz80 to Items</a>
+				</div>
+				<div class="collapse navbar-collapse" id="navbar-content">
+					<p class="navbar-text">Version 3.0</p>
+					<p class="navbar-text navbar-right">&copy;2017 ISSOtm</p>
+				</div>
+			</div>
+		</nav>
+		
+		<div class="container-fluid">
+			<h1>Welcome to <strong>GBz80 to Items</strong> !</h1>
+			<p>
+				How-to :
+				<ol>
+					<li>Enter your code in the white box below</li>
+					<li>Hit the sweet compile button</li>
+					<li>Enjoy !</li>
+				</ol>
+			</p>
+			<hr>
+			<h2>Options</h2>
+			<form class="form-inline" action="#" method="post">
+				<div class="form-group">
+					<button id="compile" class="btn btn-success form-control" role="button">Compile</button>
+				</div>
+				&nbsp;
+				<div class="form-group">
+					<label for="baseOffset">Base offset</label>
+					<div class="input-group">
+						<span class="input-group-addon" id="offsetPrefix">$</span>
+						<input type="text" id="baseOffset" class="form-control" value="D322"/>
+					</div>
+				</div>
+			</form>
+			<hr>
+			<div class="row">
+				<div class="col-sm-7">
+					<div id="errorPanel" class="hidden" aria-hidden="true">
+						<h2>Error !</h2>
+						<div class="alert alert-danger"><button type="button" id="dismissError" class="close" aria-label="Dismiss">&times;</button><span id="errorText"></span></div>
+					</div>
+					<h2>Input your code here</h2>
+					<div class="panel panel-default">
+						<div class="panel-body" id="code"></div>
+					</div>
+				</div>
+				<div class="col-sm-5">
+					<h2>Corresponding items</h2>
+					<div class="well">
+						<div class="row" id="output">
+							<div class="col-sm-7">Please type in something on the left.</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+		
+		<script type="text/javascript" src="jquery.min.js"></script> <!-- https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/ -->
+		<script type="text/javascript" src="bootstrap.min.js"></script> <!-- https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/ -->
+		<script type="text/javascript" src="compiler.js"></script>
+	</body>
+</html>
