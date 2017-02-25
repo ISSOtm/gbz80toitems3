@@ -4,7 +4,7 @@
 		<meta charset="utf-8"/>
 		<meta http-equiv="X-UA-Compatible" content="IE=edge"/>
 		<meta name="viewport" content="width=device-width, initial-scale=1"/>
-		<link rel="stylesheet" href="bootstrap.min.css"/> <!-- https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/ -->
+		<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css"/>
 		
 		<title>gbz80 to items &bull; Online gbz80 to items converter</title>
 		<meta name="description" content="An easy online convertor for Pokemon Red/Blue/Yellow arbitrary code execution !"/>
@@ -13,7 +13,7 @@
 	</head>
 	
 	<body>
-		<nav class="nav navbar-inverse navbar-fixed-top">
+		<header class="nav navbar-inverse navbar-fixed-top" role="banner">
 			<div class="container">
 				<div class="navbar-header">
 					<button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar-content" aria-expanded="false">
@@ -29,58 +29,66 @@
 					<p class="navbar-text navbar-right">&copy;2017 ISSOtm</p>
 				</div>
 			</div>
-		</nav>
+		</header>
 		
-		<div class="container-fluid">
-			<h1>Welcome to <strong>GBz80 to Items</strong> !</h1>
-			<p>
-				How-to :
-				<ol>
-					<li>Enter your code in the white box below</li>
-					<li>Hit the sweet compile button</li>
-					<li>Enjoy !</li>
-				</ol>
-			</p>
+		<div class="container-fluid" role="main">
+			<section role="document" aria-label="How-to">
+				<h1>Welcome to <strong>GBz80 to Items</strong> !</h1>
+				<div id="howto">
+					How-to :
+					<ol>
+						<li><b>Optional :</b> Enter the location where the code is intended to be</li>
+						<li>Enter your code in the white box below</li>
+						<li>Hit the sweet compile button</li>
+						<li>Enjoy !</li>
+					</ol>
+				</div>
+			</section>
 			<hr>
-			<h2>Options</h2>
-			<form class="form-inline" action="#" method="post">
-				<div class="form-group">
-					<button id="compile" class="btn btn-success form-control" role="button">Compile</button>
-				</div>
-				&nbsp;
-				<div class="form-group">
-					<label for="baseOffset">Base offset</label>
-					<div class="input-group">
-						<span class="input-group-addon" id="offsetPrefix">$</span>
-						<input type="text" id="baseOffset" class="form-control" value="D322"/>
+			<section id="app" role="application" aria-label="GBz80 to Items" aria-describedby="howto">
+				<h2 id="optLabel">Options</h2>
+				<form class="form-inline" action="#" method="post" role="toolbar" aria-labelledby="optLabel" aria-controls="code">
+					<div class="form-group">
+						<button type="submit" id="compile" class="btn btn-success form-control" tabindex="2">Compile</button>
 					</div>
-				</div>
-			</form>
-			<hr>
-			<div class="row">
-				<div class="col-sm-7">
-					<div id="errorPanel" class="hidden" aria-hidden="true">
-						<h2>Error !</h2>
-						<div class="alert alert-danger"><button type="button" id="dismissError" class="close" aria-label="Dismiss">&times;</button><span id="errorText"></span></div>
+					&nbsp;
+					<div class="form-group">
+						<label for="baseOffset">Base offset</label>
+						<div class="input-group">
+							<span class="input-group-addon" id="offsetPrefix">$</span>
+							<input type="text" id="baseOffset" class="form-control" value="D322" tabindex="0"/>
+						</div>
 					</div>
-					<h2>Input your code here</h2>
-					<div class="panel panel-default">
-						<div class="panel-body" id="code"></div>
+				</form>
+				<hr>
+				<div class="row">
+					<div class="col-sm-7">
+						<div id="errorPanel" class="hidden" aria-hidden="true" role="alert">
+							<h2 id="errorTitle">Error !</h2>
+							<div class="alert alert-danger"><button type="button" id="dismissError" class="close" aria-label="Dismiss">&times;</button><span id="errorText"></span></div>
+						</div>
+						<h2>Input your code here</h2>
+						<div class="panel panel-default">
+							<div class="panel-body">
+								<span class="hidden" id="lineNumbers"></span>
+								<p id="code" tabindex="1" role="textbox" aria-multiline="true" aria-required="true"></p>
+							</div>
+						</div>
 					</div>
-				</div>
-				<div class="col-sm-5">
-					<h2>Corresponding items</h2>
-					<div class="well">
-						<div class="row" id="output">
-							<div class="col-sm-7">Please type in something on the left.</div>
+					<div class="col-sm-5">
+						<h2>Corresponding items</h2>
+						<div class="well">
+							<div class="row" id="output">
+								<div class="col-sm-7">Please type in something on the left.</div>
+							</div>
 						</div>
 					</div>
 				</div>
-			</div>
+			</section>
 		</div>
 		
-		<script type="text/javascript" src="jquery.min.js"></script> <!-- https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/ -->
-		<script type="text/javascript" src="bootstrap.min.js"></script> <!-- https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/ -->
+		<script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+		<script type="text/javascript" src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
 		<script type="text/javascript" src="compiler.js"></script>
 	</body>
 </html>
