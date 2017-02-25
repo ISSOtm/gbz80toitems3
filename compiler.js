@@ -10,7 +10,7 @@ function hexToDec(hex) {
 	for(var i = 0; i < n; i++) {
 		var hexitDec = hexits.indexOf(hex[i]);
 		if(hexitDec == -1) {
-			throw new SyntaxError('Invalid hexadecimal ' + hex);
+			throw new AsmError('Invalid hexadecimal ' + hex);
 		}
 		
 		dec = dec * 16 + hexitDec;
@@ -40,7 +40,7 @@ function binToDec(bin) {
 		if(bin[i] == '1') {
 			dec++;
 		} else if(bin[i] != '0') {
-			throw new SyntaxError('Invalid binary ' + bin);
+			throw new AsmError('Invalid binary ' + bin);
 		}
 	}
 	
@@ -76,6 +76,26 @@ function parseBin(str) {
 }
 
 
+
+function AsmError(message) {
+	this.message = message || '';
+	
+	// Remove the call to this constructor from the stack.
+	var stack = (new Error()).stack.split('\n');
+	this.stack = this.stack || stack.slice(1).join(' ');
+	
+	// Add info on the caller - this is where the exception is being thrown, after all.
+	var callerInfo = stack[1].slice(stack[1].indexOf('@') + 1).split(':');
+	this.fileName = this.fileName || callerInfo.slice(0, -2).join(':');
+	this.lineNumber = this.lineNumber || parseInt(callerInfo.slice(-2, -1)) || '';
+	this.columnNumber = this.columnNumber || parseInt(callerInfo.slice(-1)) || '';
+}
+AsmError.prototype = Object.create(Error.prototype);
+AsmError.prototype.constructor = AsmError;
+AsmError.prototype.name = 'AsmError';
+
+
+
 var byteStream = [], currentGlobalLabel = '';
 var reg8  = ['b', 'c', 'd', 'e', 'h', 'l', '(hl)', 'a'];
 var reg16 = ['bc', 'de', 'hl', 'af'];
@@ -83,11 +103,12 @@ var conds = ['nz', 'z', 'nc', 'c'];
 
 function readByte(operand) {
 	if(operand.length != 1) {
-		throw new RangeError('Only one argument expected !');
+		throw new AsmError('Only one operand expected to readByte !');
+	} else if(operand[0] == '') {
+		throw new AsmError('Empty operand given !');
 	}
 	
 	operand = operand[0];
-	// Default behavior is to push operand on stream (will work if and only if matches a decodable label)
 	var number = operand;
 	if(operand.match(/^\d+$/)) {
 		// Decimal
@@ -98,10 +119,16 @@ function readByte(operand) {
 	} else if(operand.match(regBin)) {
 		// Bin
 		number = parseBin(operand);
+	} else if(typeof operand == 'string') {
+		// Label
+		byteStream.push({size: 1, name: operand, isLabel: 0});
+		return 1;
+	} else {
+		throw new AsmError('Invalid operand passed to readByte !');
 	}
 	
 	if(number < 0 || number > 256) {
-		throw new RangeError(operand + ' is not a number !');
+		throw new AsmError(operand + ' is not a 8-bit number !');
 	} else {
 		byteStream.push(number);
 	}
@@ -109,12 +136,152 @@ function readByte(operand) {
 	return 1;
 }
 
-function readWord(operand) { // TODO
+function readWord(operand) {
+	if(operand.length != 1) {
+		throw new AsmError('Only one operand expected to readWord !');
+	} else if(operand[0] == '') {
+		throw new AsmError('Empty operand given !');
+	}
 	
+	operand = operand[0];
+	var number = operand;
+	if(operand.match(/^\d+$/)) {
+		// Decimal
+		number = parseInt(operand);
+	} else if(operand.match(regHex)) {
+		// Hexadecimal
+		number = parseHex(operand);
+	} else if(operand.match(regBin)) {
+		// Binary
+		number = parseBin(operand);
+	} else if(typeof operand == 'string') {
+		// Label
+		byteStream.push({size: 2, name: operand, isLabel: 0});
+		return 1;
+	} else {
+		throw new AsmError('Invalid operand passed to readWord !');
+	}
+	
+	if(number < 0 || number > 256) {
+		throw new AsmError(operand + ' is not a 16-bit number !');
+	} else {
+		byteStream.push(number % 256);
+		byteStream.push(Math.floor(number / 256));
+	}
+	
+	return 2;
 }
 
 function determineLdType(operand) { // TODO
+	if(operand.length != 2) {
+		throw new AsmError('ld needs two operands !');
+	}
 	
+	var target = reg8.indexOf(operand[0]);
+	var dest;
+	if(target != -1) {
+		// Check for a reg8 target.
+		dest = reg8.indexOf(operand[1]);
+		if(dest != -1) {
+			// That's reg8 to reg8. The easy one.
+			
+			byteStream.push(64 + target * 8 + dest);
+			return 1;
+		} else if(target == 7 && operand[1][0] == '(' && operand[1][operand[1].length - 1] == ')') {
+			// A memory load to a.
+			if(operand[1] == '(bc)') {
+				// ld a, (bc)
+				
+				byteStream.push(10);
+				return 1;
+			} else if(operand[1] == '(de)') {
+				// ld a, (de)
+				
+				byteStream.push(26);
+				return 1;
+			} else if(operand[1] == '(hli)') {
+				
+				byteStream.push(42);
+				return 1;
+			} else if(operand[1] == '(hld)') {
+				
+				byteStream.push(58);
+				return 1;
+			} else {
+				// ld a, (mem16)
+				
+				byteStream.push(250);
+				readWord([operand[1]]);
+				return 3;
+			}
+			
+		} else {
+			// Assume an immediate load.
+			byteStream.push(6 + target * 8);
+			readByte([operand[1]]);
+			
+			return 2;
+		}
+		
+	} else if(operand[1] == 'a') {
+		// Memory load from a
+		if(operand[0] == '(bc)') {
+			
+			byteStream.push(2);
+			return 1;
+		} else if(operand[0] == '(de)') {
+			
+			byteStream.push(18);
+			return 1;
+		} else if(operand[0] == '(hli)') {
+			
+			byteStream.push(34);
+			return 1;
+		} else if(operand[0] =='(hld)') {
+			
+			byteStream.push(50);
+			return 1;
+		} else {
+			// ld (mem16), a
+			
+			byteStream.push(234);
+			readWord([operand[0]]);
+			return 3;
+		}
+	} else if(operand[0] == 'bc') {
+		// ld bc, imm16
+		
+		byteStream.push(1);
+		readWord([operand[1]]);
+		return 3;
+	} else if(operand[0] == 'de') {
+		// ld de, imm16
+		
+		byteStream.push(17);
+		readWord([operand[1]]);
+		return 3;
+	} else if(operand[0] == 'hl') {
+		if(operand[1].match(/^\(\s*sp\s*\+(-?\s*(?:\d+)|((?:\$|hex::?|0x)?(?:[0-9A-Fa-f]+)(?:h|H)?)|((?:%|bin::?|0b)?(?:[01]+)(?:b|B)?))\s*\)$/)) {
+			// ld hl, [sp+imm8]
+			
+			byteStream.push(248);
+			readByte(RegExp.$1);
+			return 2;
+		} else {
+			// ld hl, imm16
+			byteStream.push(33);
+			return 1;
+		}
+	} else if(operand[0] == 'sp') {
+		if(operand[1] == 'hl') {
+			byteStream.push(249);
+			return 1;
+		} else {
+			byteStream.push(49);
+			readWord(operand[1]);
+			return 3;
+		}
+	}
 }
 
 function determineLdiType(operand) {
@@ -123,7 +290,7 @@ function determineLdiType(operand) {
 	} else if(operand[0] == '(hl)' && operand[1] == 'a') {
 		byteStream.push(34);
 	} else {
-		throw new SyntaxError('Invalid use of ldi ! Either "ldi (hl), a" or "ldi a, (hl)" are valid.');
+		throw new AsmError('Invalid use of ldi ! Either "ldi (hl), a" or "ldi a, (hl)" are valid.');
 	}
 	
 	return 1;
@@ -135,7 +302,7 @@ function determineLddType(operand) {
 	} else if(operand[0] == '(hl)' && operand[1] == 'a') {
 		byteStream.push(50);
 	} else {
-		throw new SyntaxError('Invalid use of ldd ! Either "ldd (hl), a" or "ldd a, (hl)" are valid.');
+		throw new AsmError('Invalid use of ldd ! Either "ldd (hl), a" or "ldd a, (hl)" are valid.');
 	}
 	
 	return 1;
@@ -145,8 +312,12 @@ function determineLdhType(operand) {
 	var isLoadFromMem = operand[0] == 'a';
 	var memAccess = operand[isLoadFromMem];
 	if(memAccess.match(/^\(((\$|hex::?|0x)?[fF][fF]00(h|H)?\s+\+\s+)?c\)$/) || memAccess == '(c)') {
-		// ($FF00 + c)
-		byteStream.push(226 + isLoadFromMem * 16);
+		if(isLoadFromMem) {
+			throw new AsmError('Invalid operand to ldh !');
+		}
+		
+		// ldh ($FF00 + c), a
+		byteStream.push(226);
 		return 1;
 	} else {
 		byteStream.push(224 + isLoadFromMem * 16);
@@ -155,23 +326,57 @@ function determineLdhType(operand) {
 	}
 }
 
-function determineAddType(operand) { // TODO
+function determineAddType(operand) {
 	if(operand.length != 2) {
-		throw new SyntaxError('add takes exactly 2 operands !');
+		try {
+			// Try to read a "add imm8", and but throw an operand error if it fails
+			if(operand.length != 1) {
+				throw new AsmError('Welp, at least I tried being lenient.');
+			}
+			
+			byteStream.push(198);
+			readByte(operand);
+			return 2;
+			
+		} catch(err) {
+			throw new AsmError('add takes exactly 2 operands !');
+		}
 	}
-	if(operand[0] == 'sp') {
+	
+	var reg2;
+	if(operand[0] == 'hl') {
+		reg2 = reg16.indexOf(operand[1]);
+		if(reg2 == -1) {
+			throw new AsmError('add hl, reg16 expects a 16-bit register as second argument, but ' + operand[1] + ' obtained.');
+		}
 		
+		byteStream.push(reg2 * 16 + 9);
+		return 1;
+		
+	} else if(operand[0] == 'a') {
+		reg2 = reg8.indexOf(operand[1]);
+		if(reg2 == -1) {
+			// Immediate add
+			byteStream.push(198);
+			readByte(operand.slice(1));
+			return 2;
+		}
+		
+		byteStream.push(128 + reg2);
+		return 1;
+	} else {
+		throw new AsmError('add can only have a or hl as target !');
 	}
 }
 
-function determineAdcType(operand) { // TODO
+function determineAdcType(operand) {
 	var source;
 	
 	if(operand.length != 1) {
 		if(operand.length != 2) {
-			throw new SyntaxError('adc takes exactly 2 operands !');
+			throw new AsmError('adc takes exactly 2 operands !');
 		} else if(operand[0] != 'a') {
-			throw new SyntaxError('Only possible target for adc is a !');
+			throw new AsmError('Only possible target for adc is a !');
 		}
 		source = operand[1];
 	} else {
@@ -194,9 +399,9 @@ function determineSubType(operand) {
 	
 	if(operand.length != 1) {
 		if(operand.length != 2) {
-			throw new SyntaxError('sub takes exactly 2 operands !');
+			throw new AsmError('sub takes exactly 2 operands !');
 		} else if(operand[0] != 'a') {
-			throw new SyntaxError('Only possible target for sub is a !');
+			throw new AsmError('Only possible target for sub is a !');
 		}
 		source = operand[1];
 	} else {
@@ -214,14 +419,14 @@ function determineSubType(operand) {
 	}
 }
 
-function determineSbcType(operand) { // TODO
+function determineSbcType(operand) {
 	var source;
 	
 	if(operand.length != 1) {
 		if(operand.length != 2) {
-			throw new SyntaxError('sbc takes exactly 2 operands !');
+			throw new AsmError('sbc takes exactly 2 operands !');
 		} else if(operand[0] != 'a') {
-			throw new SyntaxError('Only possible target for sbc is a !');
+			throw new AsmError('Only possible target for sbc is a !');
 		}
 		source = operand[1];
 	} else {
@@ -239,12 +444,54 @@ function determineSbcType(operand) { // TODO
 	}
 }
 
-function determineIncType(operand) { // TODO
+function determineIncType(operand) {
+	if(operand.length != 1) {
+		throw new AsmError('inc takes exactly one argument !');
+	}
 	
+	var reg = reg8.indexOf(operand[0]);
+	if(reg != -1) {
+		byteStream.push(4 + reg * 8);
+		return 1;
+	}
+	
+	reg = reg16.indexOf(operand[0]);
+	if(reg != -1) {
+		byteStream.push(3 + reg * 16);
+		return 1;
+	}
+	
+	if(operand[0] == 'sp') {
+		byteStream.push(51);
+		return 1;
+	} else {
+		throw new AsmError('Expected a reg8, reg16 or sp as operand for inc, but got \'' + operand + '\'')
+	}
 }
 
-function determineDecType(operand) { // TODO
+function determineDecType(operand) {
+	if(operand.length != 1) {
+		throw new AsmError('dec takes exactly one argument !');
+	}
 	
+	var reg = reg8.indexOf(operand[0]);
+	if(reg != -1) {
+		byteStream.push(5 + reg * 8);
+		return 1;
+	}
+	
+	reg = reg16.indexOf(operand[0]);
+	if(reg != -1) {
+		byteStream.push(11 + reg * 16);
+		return 1;
+	}
+	
+	if(operand[0] == 'sp') {
+		byteStream.push(59);
+		return 1;
+	} else {
+		throw new AsmError('Expected a reg8, reg16 or sp as operand for dec, but got \'' + operand + '\'')
+	}
 }
 
 function determineAndType(operand) {
@@ -267,42 +514,106 @@ function determineCpType(operand) {
 	byteStream[byteStream.length - 1] += 40;
 }
 
-function determineJrTypeAndDest(operand) { // TODO
+function determineJrTypeAndDest(operand) {
+	if(operand.length == 1) {
+		operand.push(operand[0]);
+		byteStream.push(24);
+	} else if(operand.length == 2) {
+		var cond = conditionals.indexOf(operand[0]);
+		if(cond == -1) {
+			throw new AsmError('Invalid condition for jr !');
+		}
+		
+		byteStream.push(32 + cond * 8);
+	} else {
+		throw new AsmError('Invalid operands to jr ! ');
+	}
 	
+	byteStream.push({size: 2, name: operand[1], isLabel: 1});
+	return 2;
 }
 
-function determineJpTypeAndDest(operand) { // TODO
+function determineJpTypeAndDest(operand) {
+	if(operand.length == 1) {
+		if(operand[0] == 'hl' || operand[0] == '(hl)') {
+			// jp (hl)
+			byteStream.push(233);
+			return 1;
+		}
+		
+		operand.push(operand[0]);
+		byteStream.push(195);
+	} else if(operand.length == 2) {
+		var cond = conditionals.indexOf(operand[0]);
+		if(cond == -1) {
+			throw new AsmError('Invalid condition for jp !');
+		}
+		
+		byteStream.push(194 + cond * 8);
+	} else {
+		throw new AsmError('Invalid operands to jp ! ');
+	}
 	
+	if(typeof operand[1] == 'string') {
+		byteStream.push({size: 2, name: operand[1], isLabel: 1});
+		byteStream.push(0); // Filler for address replacement
+	} else {
+		byteStream.push(operand[1] % 256);
+		byteStream.push(Math.floor(operand[1] / 256));
+	}
+	
+	return 3;
 }
 
-function determineCallTypeAndDest(operand) { // TODO
+function determineCallTypeAndDest(operand) {
+	if(operand.length == 1) {
+		operand.push(operand[0]);
+		byteStream.push(197);
+	} else if(operand.length == 2) {
+		var cond = conditionals.indexOf(operand[0]);
+		if(cond == -1) {
+			throw new AsmError('Invalid condition for call !');
+		}
+		
+		byteStream.push(196 + cond * 8);
+	} else {
+		throw new AsmError('Invalid operands to call ! ');
+	}
 	
+	if(typeof operand[1] == 'string') {
+		byteStream.push(operand[1]);
+		byteStream.push(0); // Filler for address replacement
+	} else {
+		byteStream.push(operand[1] % 256);
+		byteStream.push(Math.floor(operand[1] / 256));
+	}
+	
+	return 3;
 }
 
 function determineRetType(operand) {
-	switch(operand.length) {
-		case 0:
-			byteStream.push(201);
-		break;
-		case 1:
-			var condOfs = conds.indexOf(operand[0]);
-			if(condOfs == -1) {
-				throw new SyntaxError('ret takes one of the following conditionals : nz, z, nc, or c');
-			}
-			
-			byteStream.push(192 + condOfs * 8);
-		break;
-		default:
-			throw new SyntaxError('ret takes only one operand !');
+	if(operand.length != 1) {
+		throw new AsmError('ret takes only one operand !');
+	}
+	
+	if(operand[0] == '') {
+		byteStream.push(201);
+	} else {
+		var condOfs = conds.indexOf(operand[0]);
+		if(condOfs == -1) {
+			throw new AsmError('ret takes one of the following conditionals : nz, z, nc, or c');
+		}
+		
+		byteStream.push(192 + condOfs * 8);
 	}
 	return 1;
 }
 
 function determineRstDestination(operand) {
 	if(operand.length != 1) {
-		throw new SyntaxError('rst takes exactly one operand !');
+		throw new AsmError('rst takes exactly one operand !');
 	} else if(!operand[0].match(/^[0-3][08]h$/)) {
-		throw new SyntaxError('rst vector must be of 00h, 08h, 10h, 18h, 20h, 28h, 30h, or 38h !');
+		throw new AsmError('rst vector must be of 00h, 08h, 10h, 18h, 20h, 28h, 30h, or 38h !');
 	}
 	
 	byteStream.push(199 + parseHex(operand[0]));
@@ -311,12 +622,12 @@ function determineRstDestination(operand) {
 
 function determinePushType(operand) {
 	if(operand.length != 1) {
-		throw new SyntaxError('push takes exactly one operand !');
+		throw new AsmError('push takes exactly one operand !');
 	}
 	
 	var reg = reg16.indexOf(operand[0]);
 	if(reg == -1) {
-		throw new SyntaxError('push : unknown operand ' + operand[0] + ' (expected bc, de, hl or af)');
+		throw new AsmError('push : unknown operand ' + operand[0] + ' (expected bc, de, hl or af)');
 	}
 	
 	byteStream.push(197 + reg * 16);
@@ -325,12 +636,12 @@ function determinePushType(operand) {
 
 function determinePopType(operand) {
 	if(operand.length != 1) {
-		throw new SyntaxError('pop takes exactly one operand !');
+		throw new AsmError('pop takes exactly one operand !');
 	}
 	
 	var reg = reg16.indexOf(operand[0]);
 	if(reg == -1) {
-		throw new SyntaxError('pop : unknown operand ' + operand[0] + ' (expected bc, de, hl or af)');
+		throw new AsmError('pop : unknown operand ' + operand[0] + ' (expected bc, de, hl or af)');
 	}
 	
 	byteStream.push(193 + reg * 16);
@@ -338,8 +649,8 @@ function determinePopType(operand) {
 }
 
 function placeNop(operand) {
-	if(operand.length) {
-		throw new SyntaxError('nop takes no operands !');
+	if(operand.length != 1 || operand[0] != '') {
+		throw new AsmError('nop takes no operands !');
 	}
 	
 	byteStream.push(0);
@@ -347,8 +658,8 @@ function placeNop(operand) {
 }
 
 function placeScf(operand) {
-	if(operand.length) {
-		throw new SyntaxError('nop takes no operands !');
+	if(operand.length != 1 || operand[0] != '') {
+		throw new AsmError('scf takes no operands !');
 	}
 	
 	byteStream.push(55);
@@ -356,8 +667,8 @@ function placeScf(operand) {
 }
 
 function placeCcf(operand) {
-	if(operand.length) {
-		throw new SyntaxError('nop takes no operands !');
+	if(operand.length != 1 || operand[0] != '') {
+		throw new AsmError('ccf takes no operands !');
 	}
 	
 	byteStream.push(63);
@@ -365,8 +676,8 @@ function placeCcf(operand) {
 }
 
 function placeCpl(operand) {
-	if(operand.length) {
-		throw new SyntaxError('nop takes no operands !');
+	if(operand.length != 1 || operand[0] != '') {
+		throw new AsmError('cpl takes no operands !');
 	}
 	
 	byteStream.push(47);
@@ -374,8 +685,8 @@ function placeCpl(operand) {
 }
 
 function placeDaa(operand) {
-	if(operand.length) {
-		throw new SyntaxError('nop takes no operands !');
+	if(operand.length != 1 || operand[0] != '') {
+		throw new AsmError('daa takes no operands !');
 	}
 	
 	byteStream.push(39);
@@ -383,8 +694,8 @@ function placeDaa(operand) {
 }
 
 function placeRla(operand) {
-	if(operand.length) {
-		throw new SyntaxError('nop takes no operands !');
+	if(operand.length != 1 || operand[0] != '') {
+		throw new AsmError('rla takes no operands !');
 	}
 	
 	byteStream.push(23);
@@ -392,8 +703,8 @@ function placeRla(operand) {
 }
 
 function placeRra(operand) {
-	if(operand.length) {
-		throw new SyntaxError('nop takes no operands !');
+	if(operand.length != 1 || operand[0] != '') {
+		throw new AsmError('rra takes no operands !');
 	}
 	
 	byteStream.push(31);
@@ -401,8 +712,8 @@ function placeRra(operand) {
 }
 
 function placeRlca(operand) {
-	if(operand.length) {
-		throw new SyntaxError('nop takes no operands !');
+	if(operand.length != 1 || operand[0] != '') {
+		throw new AsmError('rlca takes no operands !');
 	}
 	
 	byteStream.push(7);
@@ -410,61 +721,197 @@ function placeRlca(operand) {
 }
 
 function placeRrca(operand) {
-	if(operand.length) {
-		throw new SyntaxError('nop takes no operands !');
+	if(operand.length != 1 || operand[0] != '') {
+		throw new AsmError('rrca takes no operands !');
 	}
 	
 	byteStream.push(15);
 	return 1;
 }
 
-function determineRlcType(operand) { // TODO
+function determineRlcType(operand) {
+	if(operand.length != 1) {
+		throw new AsmError('rlc takes only one operand !');
+	}
 	
+	var reg = reg8.indexof(operand[0]);
+	if(reg == -1) {
+		throw new AsmError('rlc\'s operand mus be a reg8 !');
+	}
+	
+	byteStream.push(203);
+	byteStream.push(reg8);
+	return 2;
 }
 
-function determineRrcType(operand) { // TODO
+function determineRrcType(operand) {
+	if(operand.length != 1) {
+		throw new AsmError('rrc takes only one operand !');
+	}
 	
+	var reg = reg8.indexof(operand[0]);
+	if(reg == -1) {
+		throw new AsmError('rrc\'s operand mus be a reg8 !');
+	}
+	
+	byteStream.push(203);
+	byteStream.push(8 + reg8);
+	return 2;
 }
 
-function determineRlType(operand) { // TODO
+function determineRlType(operand) {
+	if(operand.length != 1) {
+		throw new AsmError('rl takes only one operand !');
+	}
 	
+	var reg = reg8.indexof(operand[0]);
+	if(reg == -1) {
+		throw new AsmError('rl\'s operand mus be a reg8 !');
+	}
+	
+	byteStream.push(203);
+	byteStream.push(16 + reg8);
+	return 2;
 }
 
-function determineRrType(operand) { // TODO
+function determineRrType(operand) {
+	if(operand.length != 1) {
+		throw new AsmError('rr takes only one operand !');
+	}
 	
+	var reg = reg8.indexof(operand[0]);
+	if(reg == -1) {
+		throw new AsmError('rr\'s operand mus be a reg8 !');
+	}
+	
+	byteStream.push(203);
+	byteStream.push(24 + reg8);
+	return 2;
 }
 
-function determineSwapType(operand) { // TODO
+function determineSlaType(operand) {
+	if(operand.length != 1) {
+		throw new AsmError('sla takes only one operand !');
+	}
 	
+	var reg = reg8.indexof(operand[0]);
+	if(reg == -1) {
+		throw new AsmError('sla\'s operand mus be a reg8 !');
+	}
+	
+	byteStream.push(203);
+	byteStream.push(32 + reg8);
+	return 2;
 }
 
-function determineSrlType(operand) { // TODO
+function determineSraType(operand) {
+	if(operand.length != 1) {
+		throw new AsmError('sra takes only one operand !');
+	}
 	
+	var reg = reg8.indexof(operand[0]);
+	if(reg == -1) {
+		throw new AsmError('sra\'s operand mus be a reg8 !');
+	}
+	
+	byteStream.push(203);
+	byteStream.push(40 + reg8);
+	return 2;
 }
 
-function determineSlaType(operand) { // TODO
+function determineSwapType(operand) {
+	if(operand.length != 1) {
+		throw new AsmError('swap takes only one operand !');
+	}
 	
+	var reg = reg8.indexof(operand[0]);
+	if(reg == -1) {
+		throw new AsmError('swap\'s operand mus be a reg8 !');
+	}
+	
+	byteStream.push(203);
+	byteStream.push(48 + reg8);
+	return 2;
 }
 
-function determineSraType(operand) { // TODO
+function determineSrlType(operand) {
+	if(operand.length != 1) {
+		throw new AsmError('srl takes only one operand !');
+	}
 	
+	var reg = reg8.indexof(operand[0]);
+	if(reg == -1) {
+		throw new AsmError('srl\'s operand mus be a reg8 !');
+	}
+	
+	byteStream.push(203);
+	byteStream.push(56 + reg8);
+	return 2;
 }
 
-function determineBitType(operand) { // TODO
+function determineBitType(operand) {
+	if(operand.length != 2) {
+		throw new AsmError('bit takes exactly two operands !');
+	}
 	
+	var bit = parseInt(operand[0]);
+	if(isNaN(bit) || bit < 0 || bit > 7) {
+		throw new AsmError('bit\'s first operand must be a number in range 0 - 7 (inclusive) !');
+	}
+	
+	var reg = reg8.indexOf(operand[1]);
+	if(reg == -1) {
+		throw new AsmError('bit\'s second operand must be a reg8 !');
+	}
+	
+	byteStream.push(203);
+	byteStream.push(64 + bit * 8 + reg);
+	return 2;
 }
 
-function determineResType(operand) { // TODO
+function determineResType(operand) {
+	if(operand.length != 2) {
+		throw new AsmError('res takes exactly two operands !');
+	}
 	
+	var bit = parseInt(operand[0]);
+	if(isNaN(bit) || bit < 0 || bit > 7) {
+		throw new AsmError('res\'s first operand must be a number in range 0 - 7 (inclusive) !');
+	}
+	
+	var reg = reg8.indexOf(operand[1]);
+	if(reg == -1) {
+		throw new AsmError('res\'s second operand must be a reg8 !');
+	}
+	
+	byteStream.push(203);
+	byteStream.push(128 + bit * 8 + reg);
+	return 2;
 }
 
-function determineSetType(operand) { // TODO
+function determineSetType(operand) {
+	if(operand.length != 2) {
+		throw new AsmError('set takes exactly two operands !');
+	}
 	
+	var bit = parseInt(operand[0]);
+	if(isNaN(bit) || bit < 0 || bit > 7) {
+		throw new AsmError('set\'s first operand must be a number in range 0 - 7 (inclusive) !');
+	}
+	
+	var reg = reg8.indexOf(operand[1]);
+	if(reg == -1) {
+		throw new AsmError('set\'s second operand must be a reg8 !');
+	}
+	
+	byteStream.push(203);
+	byteStream.push(196 + bit * 8 + reg);
+	return 2;
 }
 
 function placeHalt(operand) {
-	if(operand.length) {
-		throw new SyntaxError('nop takes no operands !');
+	if(operand.length != 1 || operand[0] != '') {
+		throw new AsmError('nop takes no operands !');
 	}
 	
 	byteStream.push(118);
@@ -472,8 +919,8 @@ function placeHalt(operand) {
 }
 
 function placeStop(operand) {
-	if(operand.length) {
-		throw new SyntaxError('nop takes no operands !');
+	if(operand.length != 1 || operand[0] != '') {
+		throw new AsmError('nop takes no operands !');
 	}
 	
 	byteStream.push(16);
@@ -482,8 +929,8 @@ function placeStop(operand) {
 }
 
 function placeEi(operand) {
-	if(operand.length) {
-		throw new SyntaxError('nop takes no operands !');
+	if(operand.length != 1 || operand[0] != '') {
+		throw new AsmError('nop takes no operands !');
 	}
 	
 	byteStream.push(251);
@@ -491,8 +938,8 @@ function placeEi(operand) {
 }
 
 function placeDi(operand) {
-	if(operand.length) {
-		throw new SyntaxError('nop takes no operands !');
+	if(operand.length != 1 || operand[0] != '') {
+		throw new AsmError('nop takes no operands !');
 	}
 	
 	byteStream.push(243);
@@ -500,8 +947,8 @@ function placeDi(operand) {
 }
 
 function placeReti(operand) {
-	if(operand.length) {
-		throw new SyntaxError('nop takes no operands !');
+	if(operand.length != 1 || operand[0] != '') {
+		throw new AsmError('nop takes no operands !');
 	}
 	
 	byteStream.push(217);
@@ -1047,7 +1494,12 @@ function compile(evt) {
 	
 	
 	var lines = document.getElementById('code').innerText.split('\n');
-	var n = lines.length;
+	var n = lines.length, i, lineNums = [];
+	
+	for(i = 1; i < n; i++) {
+		lineNums.push('' + i);
+	}
+	$('#lineNumbers').html(lineNums.join('<br/>')).removeClass('hidden').attr('aria-hidden', 'false');
 	
 	var labels = [];
 	currentGlobalLabel = '';
@@ -1060,7 +1512,7 @@ function compile(evt) {
 		});
 		
 		if(labelOffset == -1) {
-			throw new ReferenceError('Unknown label \'' + b + '\'');
+			throw new AsmError('Line ' + i + ' : Unknown label \'' + b + '\'');
 		}
 		return labelOffset;
 	}
@@ -1068,7 +1520,7 @@ function compile(evt) {
 	try {
 		var offset = hexToDec($('#baseOffset').val().toLowerCase());
 	} catch(err) {
-		throw new TypeError('Failed to parse Base offset : ' + err.message);
+		throw new AsmError('Failed to parse Base offset : ' + err.message);
 	}
 	var baseOffset = offset;
 	
@@ -1078,31 +1530,44 @@ function compile(evt) {
 	// Flush the byte stream
 	byteStream = [];
 	
-	for(i = 0; i < n; i++) {
+	for(i = 0; i < n; ) {
 		lines[i].search(/\[(.+)\]/);
-		var pieces = lines[i].toLowerCase().replace(/\[(.+)\]/)
-							 .trim() // Trim to make sure the first character is instruction
+		var pieces = lines[i].toLowerCase()
+							 .replace('[', '(').replace(']', ')') // Braces will be parsed the same as parentheses. Note that "ld [hl), 1" becomes valid...whatever.
+							 .trim() // Trim to make sure the first character is wordy
 							 .split(';')[0] // Get the part before the comment,
 							 .split(/\s+/); // And split each part, allowing each to be separated by any "white" characters
 		var instrName = pieces[0]; // Get the instruction name
 		var operands = pieces.slice(1).join('').split(','); // Get the operand part
+		
+		i++;
 		
 		if(instrName != '') { // If the line contains nothing, don't process it
 			
 			if(instrName[0] == '.') {
 				// Local label
 				// Name will be in format "Global.Local"
-				if(labels.indexOf(currentGlobalLabel + instrName)) {
-					throw new SyntaxError('Duplicate label ' + currentGlobalLabel + instrName);
+				instrName = instrName.trim();
+				if(instrName.slice(1) == '') {
+					throw new AsmError('Line ' + i + ' : Empty label name !');
+				}
+				
+				if(labels.indexOf(currentGlobalLabel + instrName) != -1) {
+					throw new AsmError('Line ' + i + ' : Duplicate label ' + currentGlobalLabel + instrName);
 				}
 				labels.push({name: currentGlobalLabel + instrName, offset: offset});
 				
 			} else if(instrName.indexOf(':') != -1) {
 				// Global label
-				if(labels.indexOf(instrName)) {
-					throw new SyntaxError('Duplicate label ' + instrName);
+				instrName = instrName.replace(':', '').replace(':', '').trim();
+				if(instrName == '') {
+					throw new AsmError('Line ' + i + ' : Empty label name !');
 				}
-				labels.push({name: instrName.slice(':')[0], offset: offset});
+				
+				if(labels.indexOf(instrName) != -1) {
+					throw new AsmError('Line ' + i + ' : Duplicate label ' + instrName);
+				}
+				labels.push({name: instrName, offset: offset});
 				currentGlobalLabel = instrName;
 				
 			} else {
@@ -1111,19 +1576,32 @@ function compile(evt) {
 				instructions.forEach(function(instruction) {
 					if(instruction.name == instrName) {
 						// The function return how many bytes were written.
-						offset += instruction.func(operands);
+						try {
+							var len = instruction.func(operands);
+							offset += len;
+							
+							// Add the current line number to all added objects
+							for(var index = 0; index < len; index++) {
+								if(typeof byteStream[index] == 'object') {
+									byteStream[index].line = i;
+								}
+							}
+						} catch(err) {
+							err.message = 'Line ' + i + ' : ' + err.message;
+							throw err;
+						}
 						ranFunc = true;
 					}
 				});
 				
 				if(!ranFunc) {
-					throw new RangeError('Unknown instruction : ' + instrName + ' (line ' + i + ')');
+					throw new AsmError('Line ' + i + ' : Unknown instruction : ' + instrName + ' (line ' + i + ')');
 				}
 			}
 		}
 		
 		if(offset >= 65536) {
-			throw new RangeError('You went beyond $FFFF in memory !');
+			throw new AsmError('Line ' + i + ' : You went beyond $FFFF in memory !');
 		}
 	}
 	
@@ -1136,7 +1614,7 @@ function compile(evt) {
 	var itemList = [];
 	var warnings = {duplicate: false, quantity: false, invalid: false};
 	
-	for(var i = 0; i < n; i++) {
+	function processByteStreamElem(i) {
 		var b = byteStream[i];
 		
 		switch(typeof b) {
@@ -1145,13 +1623,22 @@ function compile(evt) {
 			break;
 			
 			case 'object':
-				// Replace the label with its data, according to the accompaniying size attribute.
+				// Replace the label with its data, according to the accompanying size attribute.
 				var addr = -1;
 				labels.forEach(function(label) {
 					if(label.name == b.name) {
-						addr = label.addr;
+						addr = label.offset;
 					}
 				});
+				if(addr == -1) {
+					if(b.label) {
+						console.table(labels);
+						throw new AsmError('Line ' + b.line + ' : Label ' + b.name + ' is unknown !');
+					} else {
+						throw new AsmError('Line ' + b.line + ' : Invalid operand ' + b.name + ' !');
+					}
+				}
+				
 				// 8-bit will calculate (jr) offset, 16-bit will calculate the address.
 				if(b.size == 2) {
 					// 16-bit
@@ -1161,7 +1648,7 @@ function compile(evt) {
 					// 8-bit
 					b = addr - (offset + 1);
 					if(b < -128 || b > 127) {
-						throw new RangeError('jr displacement too important ! Can\'t jr from $' + offset + ' to ' + byteStream[i]);
+						throw new AsmError('Line ' + b.line + ' : jr displacement too important ! Can\'t jr from $' + offset + ' to ' + byteStream[i]);
 					}
 					
 					// Signed to unsigned
@@ -1169,12 +1656,19 @@ function compile(evt) {
 						b += 256;
 					}
 				}
+				
+				byteStream[i] = b;
 			break;
 			
 			default:
 				console.table(byteStream);
-				throw new TypeError('Encountered invalid byte stream value at index ' + i);
+				throw new AsmError('Encountered invalid byte stream value at index ' + i);
 		}
+	}
+	
+	for(i = 0; i < n; i++) {
+		processByteStreamElem(i);
+		var b = byteStream[i];
 		
 		// We now process the thing.
 		if(attribs[b].used) {
@@ -1199,6 +1693,7 @@ function compile(evt) {
 		if(i == byteStream.length) {
 			line += 'x[Any qty]';
 		} else {
+			processByteStreamElem(i);
 			line += 'x' + byteStream[i] + ' (hex:' + decToHex(byteStream[i]).toUpperCase() + ')';
 		}
 		
@@ -1218,16 +1713,25 @@ $(function() {
 	$('#code').attr('contentEditable', 'true');
 	
 	$('#dismissError').click(function() {
-		$('#errorPanel').addClass('hidden');
+		$('#errorPanel, #lineNumbers').addClass('hidden').attr('aria-hidden', 'true');
+	});
+	
+	$('#code').focus(function() {
+		$('#lineNumbers').addClass('hidden').attr('aria-hidden', 'true');
 	});
 	
 	$('.form-inline').on('submit', function(evt) {
+		$('#app').attr('aria-busy', 'true');
+		
 		try {
 			compile(evt);
 		} catch(err) {
+			$('#errorTitle').text((err.name == 'AsmError') ? 'Error !' : 'Internal error !');
 			$('#errorText').text(err.message);
 			$('#errorPanel').removeClass('hidden').attr('aria-hidden', 'false');
 			throw err;
+		} finally {
+			$('#app').attr('aria-busy', 'false');
 		}
 	});
 });
