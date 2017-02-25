@@ -162,7 +162,7 @@ function readWord(operand) {
 		throw new AsmError('Invalid operand passed to readWord !');
 	}
 	
-	if(number < 0 || number > 256) {
+	if(number < 0 || number > 65535) {
 		throw new AsmError(operand + ' is not a 16-bit number !');
 	} else {
 		byteStream.push(number % 256);
@@ -211,7 +211,7 @@ function determineLdType(operand) { // TODO
 				// ld a, (mem16)
 				
 				byteStream.push(250);
-				readWord([operand[1]]);
+				readWord([operand[1].slice(1, -1).trim()]);
 				return 3;
 			}
 			
@@ -245,7 +245,7 @@ function determineLdType(operand) { // TODO
 			// ld (mem16), a
 			
 			byteStream.push(234);
-			readWord([operand[0]]);
+			readWord([operand[0].slice(1, -1).trim()]);
 			return 3;
 		}
 	} else if(operand[0] == 'bc') {
@@ -281,10 +281,16 @@ function determineLdType(operand) { // TODO
 			readWord(operand[1]);
 			return 3;
 		}
+	} else {
+		throw new AsmError('Unknown operands to ld !');
 	}
 }
 
 function determineLdiType(operand) {
+	if(operand.length != 2) {
+		throw new AsmError('ldi takes exactly two arguments !');
+	}
+	
 	if(operand[0] == 'a' && operand[1] == '(hl)') {
 		byteStream.push(42);
 	} else if(operand[0] == '(hl)' && operand[1] == 'a') {
@@ -297,6 +303,10 @@ function determineLdiType(operand) {
 }
 
 function determineLddType(operand) {
+	if(operand.length != 2) {
+		throw new AsmError('ldd takes exactly two arguments !');
+	}
+	
 	if(operand[0] == 'a' && operand[1] == '(hl)') {
 		byteStream.push(58);
 	} else if(operand[0] == '(hl)' && operand[1] == 'a') {
@@ -309,9 +319,17 @@ function determineLddType(operand) {
 }
 
 function determineLdhType(operand) {
+	if(operand.length != 2) {
+		throw new AsmError('ldh takes exactly two arguments !');
+	}
+	
+	if(operand[0] != 'a' && operand[1] != 'a') {
+		throw new AsmError('ldh requires a as one of its operands !');
+	}
+	
 	var isLoadFromMem = operand[0] == 'a';
-	var memAccess = operand[isLoadFromMem];
-	if(memAccess.match(/^\(((\$|hex::?|0x)?[fF][fF]00(h|H)?\s+\+\s+)?c\)$/) || memAccess == '(c)') {
+	var memAccess = operand[0 + isLoadFromMem].trim();
+	if(memAccess.match(/^\(((\$|hex::?|0x)?[fF]{2}00(h|H)?\s+\+\s+)?c\)$/) || memAccess == '(c)') {
 		if(isLoadFromMem) {
 			throw new AsmError('Invalid operand to ldh !');
 		}
@@ -319,10 +337,12 @@ function determineLdhType(operand) {
 		// ldh ($FF00 + c), a
 		byteStream.push(226);
 		return 1;
-	} else {
+	} else if(memAccess.match(/^\((?:\$|hex::?|0x)(?:[fF]{2}(?:00\s+\+\s+(?:\$|hex::?|0x)?)?)?([0-9A-Fa-f]{2})\)$/)) {
 		byteStream.push(224 + isLoadFromMem * 16);
-		readByte([operand[1]]);
+		readByte(['$' + RegExp.$1]);
 		return 2;
+	} else {
+		throw new AsmError('Invalid operand to ldh : ' + memAccess);
 	}
 }
 
@@ -734,7 +754,7 @@ function determineRlcType(operand) {
 		throw new AsmError('rlc takes only one operand !');
 	}
 	
-	var reg = reg8.indexof(operand[0]);
+	var reg = reg8.indexOf(operand[0]);
 	if(reg == -1) {
 		throw new AsmError('rlc\'s operand mus be a reg8 !');
 	}
@@ -749,7 +769,7 @@ function determineRrcType(operand) {
 		throw new AsmError('rrc takes only one operand !');
 	}
 	
-	var reg = reg8.indexof(operand[0]);
+	var reg = reg8.indexOf(operand[0]);
 	if(reg == -1) {
 		throw new AsmError('rrc\'s operand mus be a reg8 !');
 	}
@@ -764,7 +784,7 @@ function determineRlType(operand) {
 		throw new AsmError('rl takes only one operand !');
 	}
 	
-	var reg = reg8.indexof(operand[0]);
+	var reg = reg8.indexOf(operand[0]);
 	if(reg == -1) {
 		throw new AsmError('rl\'s operand mus be a reg8 !');
 	}
@@ -779,7 +799,7 @@ function determineRrType(operand) {
 		throw new AsmError('rr takes only one operand !');
 	}
 	
-	var reg = reg8.indexof(operand[0]);
+	var reg = reg8.indexOf(operand[0]);
 	if(reg == -1) {
 		throw new AsmError('rr\'s operand mus be a reg8 !');
 	}
@@ -794,7 +814,7 @@ function determineSlaType(operand) {
 		throw new AsmError('sla takes only one operand !');
 	}
 	
-	var reg = reg8.indexof(operand[0]);
+	var reg = reg8.indexOf(operand[0]);
 	if(reg == -1) {
 		throw new AsmError('sla\'s operand mus be a reg8 !');
 	}
@@ -809,7 +829,7 @@ function determineSraType(operand) {
 		throw new AsmError('sra takes only one operand !');
 	}
 	
-	var reg = reg8.indexof(operand[0]);
+	var reg = reg8.indexOf(operand[0]);
 	if(reg == -1) {
 		throw new AsmError('sra\'s operand mus be a reg8 !');
 	}
@@ -824,7 +844,7 @@ function determineSwapType(operand) {
 		throw new AsmError('swap takes only one operand !');
 	}
 	
-	var reg = reg8.indexof(operand[0]);
+	var reg = reg8.indexOf(operand[0]);
 	if(reg == -1) {
 		throw new AsmError('swap\'s operand mus be a reg8 !');
 	}
@@ -839,7 +859,7 @@ function determineSrlType(operand) {
 		throw new AsmError('srl takes only one operand !');
 	}
 	
-	var reg = reg8.indexof(operand[0]);
+	var reg = reg8.indexOf(operand[0]);
 	if(reg == -1) {
 		throw new AsmError('srl\'s operand mus be a reg8 !');
 	}
