@@ -96,7 +96,7 @@ AsmError.prototype.name = 'AsmError';
 
 
 
-var byteStream = [], currentGlobalLabel = '';
+var byteStream = [], currentGlobalLabel = '', labels = [];
 var reg8  = ['b', 'c', 'd', 'e', 'h', 'l', '(hl)', 'a'];
 var reg16 = ['bc', 'de', 'hl', 'af'];
 var conds = ['nz', 'z', 'nc', 'c'];
@@ -121,7 +121,7 @@ function readByte(operand) {
 		number = parseBin(operand);
 	} else if(typeof operand == 'string') {
 		// Label
-		byteStream.push({size: 1, name: operand, isLabel: 0});
+		byteStream.push({size: 1, name: operand, isLabel: false});
 		return 1;
 	} else {
 		throw new AsmError('Invalid operand passed to readByte !');
@@ -156,8 +156,9 @@ function readWord(operand) {
 		number = parseBin(operand);
 	} else if(typeof operand == 'string') {
 		// Label
-		byteStream.push({size: 2, name: operand, isLabel: 0});
-		return 1;
+		byteStream.push({size: 2, name: operand, isLabel: false});
+		byteStream.push(0);
+		return 2;
 	} else {
 		throw new AsmError('Invalid operand passed to readWord !');
 	}
@@ -539,7 +540,7 @@ function determineJrTypeAndDest(operand) {
 		operand.push(operand[0]);
 		byteStream.push(24);
 	} else if(operand.length == 2) {
-		var cond = conditionals.indexOf(operand[0]);
+		var cond = conds.indexOf(operand[0]);
 		if(cond == -1) {
 			throw new AsmError('Invalid condition for jr !');
 		}
@@ -549,7 +550,24 @@ function determineJrTypeAndDest(operand) {
 		throw new AsmError('Invalid operands to jr ! ');
 	}
 	
-	byteStream.push({size: 2, name: operand[1], isLabel: 1});
+	readWord([operand[1]]);
+	var high = byteStream.pop(), low = byteStream.pop();
+	if(typeof low == 'object') {
+		low.size = 1;
+		low.isLabel = true;
+		byteStream.push(low);
+	} else {
+		
+		var addr = high * 256 + low;
+		var i = 0, uniqueName = 'jr:0';
+		while(labels.indexOf(uniqueName) != -1) {
+			i++;
+			uniqueName = 'jr:' + i;
+		}
+		labels.push({name: uniqueName, offset: addr});
+		byteStream.push({size: 1, name: uniqueName, isLabel: true});
+	}
+
 	return 2;
 }
 
@@ -564,7 +582,7 @@ function determineJpTypeAndDest(operand) {
 		operand.push(operand[0]);
 		byteStream.push(195);
 	} else if(operand.length == 2) {
-		var cond = conditionals.indexOf(operand[0]);
+		var cond = conds.indexOf(operand[0]);
 		if(cond == -1) {
 			throw new AsmError('Invalid condition for jp !');
 		}
@@ -574,14 +592,10 @@ function determineJpTypeAndDest(operand) {
 		throw new AsmError('Invalid operands to jp ! ');
 	}
 	
-	if(typeof operand[1] == 'string') {
-		byteStream.push({size: 2, name: operand[1], isLabel: 1});
-		byteStream.push(0); // Filler for address replacement
-	} else {
-		byteStream.push(operand[1] % 256);
-		byteStream.push(Math.floor(operand[1] / 256));
+	readWord([operand[1]]);
+	if(typeof byteStream[byteStream.length - 2] == 'object') {
+		byteStream[byteStream.length - 2].isLabel = true;
 	}
-	
 	return 3;
 }
 
@@ -1033,7 +1047,7 @@ var items = [
 		"Protein",
 		"Iron",
 		"Carbos",
-		"Calcuim",
+		"Calcium",
 		"Rare Candy",
 		"Dome Fossil",
 		"Helix Fossil",
@@ -1521,7 +1535,7 @@ function compile(evt) {
 	}
 	$('#lineNumbers').html(lineNums.join('<br/>')).removeClass('hidden').attr('aria-hidden', 'false');
 	
-	var labels = [];
+	labels = [];
 	currentGlobalLabel = '';
 	function getLabelOffset(labelName) {
 		var labelOffset = -1;
@@ -1601,9 +1615,9 @@ function compile(evt) {
 							offset += len;
 							
 							// Add the current line number to all added objects
-							for(var index = 0; index < len; index++) {
-								if(typeof byteStream[index] == 'object') {
-									byteStream[index].line = i;
+							for(var index = 1; index <= len; index++) {
+								if(typeof byteStream[byteStream.length - index] == 'object') {
+									byteStream[byteStream.length - index].line = i;
 								}
 							}
 						} catch(err) {
@@ -1666,7 +1680,7 @@ function compile(evt) {
 					byteStream[i+1] = Math.floor(addr / 256);
 				} else {
 					// 8-bit
-					b = addr - (offset + 1);
+					b = addr - (offset + 2);
 					if(b < -128 || b > 127) {
 						throw new AsmError('Line ' + b.line + ' : jr displacement too important ! Can\'t jr from $' + offset + ' to ' + byteStream[i]);
 					}
