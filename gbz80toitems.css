@@ -16,3 +16,7 @@ body {
 	text-align: right;
 	background-color: #eee;
 }
+
+.panel {
+	border-color: #ccc;
+}
