@@ -620,9 +620,9 @@ function determineJpTypeAndDest(operand) {
 function determineCallTypeAndDest(operand) {
 	if(operand.length == 1) {
 		operand.push(operand[0]);
-		byteStream.push(197);
+		byteStream.push(205);
 	} else if(operand.length == 2) {
-		var cond = conditionals.indexOf(operand[0]);
+		var cond = conds.indexOf(operand[0]);
 		if(cond == -1) {
 			throw new AsmError('Invalid condition for call !');
 		}
@@ -632,14 +632,10 @@ function determineCallTypeAndDest(operand) {
 		throw new AsmError('Invalid operands to call ! ');
 	}
 	
-	if(typeof operand[1] == 'string') {
-		byteStream.push(operand[1]);
-		byteStream.push(0); // Filler for address replacement
-	} else {
-		byteStream.push(operand[1] % 256);
-		byteStream.push(Math.floor(operand[1] / 256));
+	readWord([operand[1]]);
+	if(typeof byteStream[byteStream.length - 2] == 'object') {
+		byteStream[byteStream.length - 2].isLabel = true;
 	}
-	
 	return 3;
 }
 
@@ -1807,5 +1803,10 @@ $(function() {
 		} finally {
 			$('#app').attr('aria-busy', 'false');
 		}
+	});
+	
+	// Otherwise the <p> is a bit small and tedious to get focus on.
+	$('.panel-body').click(function() {
+		document.getElementById('code').focus();
 	});
 });
