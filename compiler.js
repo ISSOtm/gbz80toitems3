@@ -224,6 +224,10 @@ function determineLdType(operand) {
 				
 				byteStream.push(58);
 				return 1;
+			} else if(operand[1] == '(c)' || /\(\$?ff00\+c\)/.test(operand[1])) {
+				
+				byteStream.push(242);
+				return 1;
 			} else {
 				// ld a, (mem16)
 				
@@ -254,9 +258,13 @@ function determineLdType(operand) {
 			
 			byteStream.push(34);
 			return 1;
-		} else if(operand[0] =='(hld)') {
+		} else if(operand[0] == '(hld)') {
 			
 			byteStream.push(50);
+			return 1;
+		} else if(operand[0] == '(c)' || /\(\$?ff00\+c\)/.test(operand[0])) {
+			
+			byteStream.push(226);
 			return 1;
 		} else {
 			// ld (mem16), a
@@ -868,7 +876,7 @@ function determineRlcType(operand) {
 	}
 	
 	byteStream.push(203);
-	byteStream.push(reg8);
+	byteStream.push(reg);
 	return 2;
 }
 
@@ -883,7 +891,7 @@ function determineRrcType(operand) {
 	}
 	
 	byteStream.push(203);
-	byteStream.push(8 + reg8);
+	byteStream.push(8 + reg);
 	return 2;
 }
 
@@ -898,7 +906,7 @@ function determineRlType(operand) {
 	}
 	
 	byteStream.push(203);
-	byteStream.push(16 + reg8);
+	byteStream.push(16 + reg);
 	return 2;
 }
 
@@ -913,7 +921,7 @@ function determineRrType(operand) {
 	}
 	
 	byteStream.push(203);
-	byteStream.push(24 + reg8);
+	byteStream.push(24 + reg);
 	return 2;
 }
 
@@ -928,7 +936,7 @@ function determineSlaType(operand) {
 	}
 	
 	byteStream.push(203);
-	byteStream.push(32 + reg8);
+	byteStream.push(32 + reg);
 	return 2;
 }
 
@@ -943,7 +951,7 @@ function determineSraType(operand) {
 	}
 	
 	byteStream.push(203);
-	byteStream.push(40 + reg8);
+	byteStream.push(40 + reg);
 	return 2;
 }
 
@@ -958,7 +966,7 @@ function determineSwapType(operand) {
 	}
 	
 	byteStream.push(203);
-	byteStream.push(48 + reg8);
+	byteStream.push(48 + reg);
 	return 2;
 }
 
@@ -973,7 +981,7 @@ function determineSrlType(operand) {
 	}
 	
 	byteStream.push(203);
-	byteStream.push(56 + reg8);
+	byteStream.push(56 + reg);
 	return 2;
 }
 
@@ -1829,8 +1837,9 @@ function compile(evt) {
 		}
 		
 		line += '</div><div class="col-sm-5">';
-		
+		offset++;
 		i++;
+		
 		if(i == byteStream.length) {
 			line += 'x[Any qty]';
 		} else {
