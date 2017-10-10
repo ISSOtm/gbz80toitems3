@@ -534,23 +534,103 @@ function determineDecType(operand) {
 }
 
 function determineAndType(operand) {
-	determineSubType(operand);
-	byteStream[byteStream.length - 1] += 16;
+	var source;
+	
+	if(operand.length != 1) {
+		if(operand.length != 2) {
+			throw new AsmError('and takes exactly 2 operands !');
+		} else if(operand[0] != 'a') {
+			throw new AsmError('Only possible target for and is a !');
+		}
+		source = operand[1];
+	} else {
+		source = operand[0];
+	}
+	
+	var sourceID = reg8.indexOf(source);
+	if(sourceID != -1) {
+		byteStream.push(160 + sourceID);
+		return 1;
+	} else {
+		byteStream.push(230);
+		readByte([source]);
+		return 2;
+	}
 }
 
 function determineOrType(operand) {
-	determineSubType(operand);
-	byteStream[byteStream.length - 1] += 32;
+	var source;
+	
+	if(operand.length != 1) {
+		if(operand.length != 2) {
+			throw new AsmError('or takes exactly 2 operands !');
+		} else if(operand[0] != 'a') {
+			throw new AsmError('Only possible target for or is a !');
+		}
+		source = operand[1];
+	} else {
+		source = operand[0];
+	}
+	
+	var sourceID = reg8.indexOf(source);
+	if(sourceID != -1) {
+		byteStream.push(176 + sourceID);
+		return 1;
+	} else {
+		byteStream.push(246);
+		readByte([source]);
+		return 2;
+	}
 }
 
 function determineXorType(operand) {
-	determineSubType(operand);
-	byteStream[byteStream.length - 1] += 24;
+	var source;
+	
+	if(operand.length != 1) {
+		if(operand.length != 2) {
+			throw new AsmError('xor takes exactly 2 operands !');
+		} else if(operand[0] != 'a') {
+			throw new AsmError('Only possible target for xor is a !');
+		}
+		source = operand[1];
+	} else {
+		source = operand[0];
+	}
+	
+	var sourceID = reg8.indexOf(source);
+	if(sourceID != -1) {
+		byteStream.push(168 + sourceID);
+		return 1;
+	} else {
+		byteStream.push(238);
+		readByte([source]);
+		return 2;
+	}
 }
 
 function determineCpType(operand) {
-	determineSubType(operand);
-	byteStream[byteStream.length - 1] += 40;
+	var source;
+	
+	if(operand.length != 1) {
+		if(operand.length != 2) {
+			throw new AsmError('cp takes exactly 2 operands !');
+		} else if(operand[0] != 'a') {
+			throw new AsmError('Only possible target for cp is a !');
+		}
+		source = operand[1];
+	} else {
+		source = operand[0];
+	}
+	
+	var sourceID = reg8.indexOf(source);
+	if(sourceID != -1) {
+		byteStream.push(184 + sourceID);
+		return 1;
+	} else {
+		byteStream.push(254);
+		readByte([source]);
+		return 2;
+	}
 }
 
 function determineJrTypeAndDest(operand) {
