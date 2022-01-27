@@ -1041,7 +1041,7 @@ function determineSetType(operand) {
 	}
 	
 	byteStream.push(203);
-	byteStream.push(196 + bit * 8 + reg);
+	byteStream.push(192 + bit * 8 + reg);
 	return 2;
 }
 
