@@ -304,7 +304,7 @@ function determineLdType(operand) {
 			return 1;
 		} else {
 			byteStream.push(49);
-			readWord(operand[1]);
+			readWord([operand[1]]);
 			return 3;
 		}
 	} else {
